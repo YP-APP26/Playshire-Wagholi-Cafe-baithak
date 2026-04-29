@@ -77,4 +77,117 @@
         function showLogin() {
             document.getElementById('customerView').style.display = 'none';
             document.getElementById('bottomBar').style.display = 'none';
-            document.getElementById('loginView').style.display
+            document.getElementById('loginView').style.display = 'block';
+        }
+
+        function checkPassword() {
+            if(document.getElementById('passInput').value === 'baba') {
+                document.getElementById('loginView').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                renderAdminMenu();
+            } else { alert("Wrong Password"); }
+        }
+
+        async function saveItem() {
+            const id = document.getElementById('editId').value;
+            const name = document.getElementById('itemName').value;
+            const price = document.getElementById('itemPrice').value;
+            const cat = document.getElementById('itemCat').value;
+
+            if(!name || !price) return alert("Fill Name and Price");
+
+            const itemObj = {
+                name: name,
+                price: parseInt(price),
+                category: cat,
+                active: true,
+                img: "https://cdn-icons-png.flaticon.com/512/1147/1147805.png"
+            };
+
+            try {
+                if(id) {
+                    await window.updateDoc(window.doc(window.db, "menu", id), itemObj);
+                } else {
+                    await window.addDoc(window.collection(window.db, "menu"), itemObj);
+                }
+                resetForm();
+                alert("Success!");
+            } catch (e) { alert("Error: " + e.message); }
+        }
+
+        async function deleteItem(id) {
+            if(confirm("Delete from Cloud?")) {
+                await window.deleteDoc(window.doc(window.db, "menu", id));
+            }
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menuContainer');
+            if(!container) return;
+            container.innerHTML = "";
+            ["Snacks", "Beverages", "From Baba's Kitchen"].forEach(cat => {
+                const items = menuData.filter(i => i.category === cat);
+                if(items.length > 0) {
+                    container.innerHTML += `<div class="category-header">${cat}</div>`;
+                    items.forEach(item => {
+                        container.innerHTML += `
+                            <div class="menu-item">
+                                <img src="${item.img}" class="item-img">
+                                <div style="flex:1"><strong>${item.name}</strong><br><small>₹${item.price}</small></div>
+                            </div>`;
+                    });
+                }
+            });
+        }
+
+        function renderAdminMenu() {
+            const d = document.getElementById('adminMenuDisplay');
+            if(!d) return;
+            d.innerHTML = "<h4>Live Cloud Items</h4>";
+            menuData.forEach(i => {
+                d.innerHTML += `
+                    <div class="admin-row">
+                        <span><strong>${i.name}</strong> (₹${i.price})</span>
+                        <button onclick="deleteItem('${i.id}')" style="color:red; border:1px solid red; background:none; border-radius:4px; padding:4px 8px; cursor:pointer;">Del</button>
+                    </div>`;
+            });
+        }
+
+        function resetForm() {
+            document.getElementById('editId').value = "";
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemPrice').value = "";
+        }
+        function logout() { location.reload(); }
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCp2wCB4i_I641WoRvV-XPUF-eqa0WS7CQ",
+            authDomain: "fb1firebaseproject-162fd.firebaseapp.com",
+            projectId: "fb1firebaseproject-162fd",
+            storageBucket: "fb1firebaseproject-162fd.firebasestorage.app",
+            appId: "1:763786893796:web:8dfbb760dfe4a2a91ecff1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.db = db;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.doc = doc;
+        window.updateDoc = updateDoc;
+        window.deleteDoc = deleteDoc;
+
+        onSnapshot(collection(db, "menu"), (snapshot) => {
+            menuData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            renderMenu();
+            if(document.getElementById('adminPanel').style.display === 'block') renderAdminMenu();
+        });
+    </script>
+</body>
+</html>
