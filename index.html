@@ -388,31 +388,38 @@
     storageBucket: "your-project-id.appspot.com",
     messagingSenderId: "YOUR_SENDER_ID",
     appId: "YOUR_APP_ID"
-  };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  console.log("Firebase connected to Cafe Baithak!");
-</script>
+        <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-// 1. ADD THIS LINE:
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+      // 1. Replace with your ACTUAL keys from Firebase Console
+      const firebaseConfig = {
+        apiKey: "YOUR_ACTUAL_API_KEY",
+        authDomain: "your-project.firebaseapp.com",
+        projectId: "your-project-id",
+        storageBucket: "your-project.appspot.com",
+        messagingSenderId: "123456789",
+        appId: "1:123456789:web:abcdef123"
+      };
 
-const firebaseConfig = { /* your actual config here */ };
+      // 2. Initialize
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
 
-const app = initializeApp(firebaseConfig);
-// 2. ADD THIS LINE:
-const db = getFirestore(app);
+      // 3. Function to push order to Firebase
+      async function pushOrderToFirebase(orderData) {
+        try {
+          const docRef = await addDoc(collection(db, "orders"), orderData);
+          console.log("Order saved to Firebase ID: ", docRef.id);
+        } catch (e) {
+          console.error("Firebase Error: ", e);
+        }
+      }
 
-// Example function to push data
-async function placeOrder(orderData) {
-  try {
-    const docRef = await addDoc(collection(db, "orders"), orderData);
-    console.log("Order saved with ID: ", docRef.id);
-  } catch (e) {
-    console.error("Error adding document: ", e);
-  }
-}
-</body>
+      // 4. Connect this to your existing sendOrder function
+      window.pushOrderToFirebase = pushOrderToFirebase;
+      console.log("Firebase is ready!");
+    </script>
+  </body>
 </html>
