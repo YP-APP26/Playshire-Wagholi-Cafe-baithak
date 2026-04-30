@@ -362,17 +362,22 @@
         import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // REPLACE THE PLACEHOLDERS BELOW WITH YOUR ACTUAL KEYS
-        const firebaseConfig = {
-            apiKey: "PASTE_API_KEY_HERE",
-            authDomain: "PASTE_AUTH_DOMAIN_HERE",
-            projectId: "PASTE_PROJECT_ID_HERE",
-            storageBucket: "PASTE_STORAGE_BUCKET_HERE",
-            messagingSenderId: "PASTE_SENDER_ID_HERE",
-            appId: "PASTE_APP_ID_HERE"
-        };
+       const firebaseConfig = {
+  apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
+  authDomain: "cafebaitak.firebaseapp.com",
+  projectId: "cafebaitak",
+  storageBucket: "cafebaitak.firebasestorage.app",
+  messagingSenderId: "469277261083",
+  appId: "1:469277261083:web:9aae36a50a6d810385e7be",
+  measurementId: "G-RLXW4H9ELR"
+};
+        // Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+       
+        import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
 
         window.pushOrderToFirebase = async (orderData) => {
             try {
