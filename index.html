@@ -85,4 +85,304 @@
                     <option value="Admin">Admin (Cafe Baithak)</option>
                     <option value="Baba">Baba (Baba's Kitchen)</option>
                 </select>
-                <input type="file" id="item
+                <input type="file" id="itemFile" accept="image/*">
+                <button class="btn-red" id="saveBtn" onclick="saveItem()">Add to Menu</button>
+                <button id="cancelEdit" style="display:none; width:100%; border:none; background:none; color:blue; margin-top:10px;" onclick="resetForm()">Cancel Edit</button>
+            </div>
+            <div id="adminMenuDisplay" style="margin-top:20px;"></div>
+            <button onclick="logout()" style="width:100%; margin-top:20px; color:red; border:none; background:none;">Logout</button>
+        </div>
+
+        <div id="summaryView">
+            <h3>Checkout</h3>
+            <div class="delivery-toggle">
+                <div id="btnPickup" class="toggle-btn" onclick="setMode('Pickup')">Self Pickup</div>
+                <div id="btnDelivery" class="toggle-btn active" onclick="setMode('Delivery')">Home Delivery</div>
+            </div>
+            <div id="summaryItems" style="background:#f9f9f9; padding:15px; border-radius:8px;"></div>
+            <input type="text" id="custName" placeholder="Your Name">
+            <textarea id="custAddr" placeholder="Delivery Address" rows="3"></textarea>
+            <button class="btn-red" onclick="sendOrder()">Order on WhatsApp</button>
+            <p onclick="goHome()" style="text-align:center; color:gray; cursor:pointer;">← Back</p>
+        </div>
+
+        <div id="bottomBar" class="bottom-bar">
+            <div><strong>₹<span id="totalDisplay">0</span></strong><br><small>TOTAL</small></div>
+            <button class="btn-red" style="width:auto; padding:10px 25px;" onclick="showSummary()">Checkout</button>
+        </div>
+    </div>
+
+    <script>
+        let menuData = JSON.parse(localStorage.getItem('cafeMenu')) || [];
+        let bannerMsg = localStorage.getItem('menuMsg') || "";
+        let delCharge = localStorage.getItem('delCharge') || 30;
+        let cart = {};
+        let currentMode = 'Delivery';
+
+        let clickCount = 0;
+        let clickTimer = null;
+        function handleLogoClick() {
+            clickCount++;
+            clearTimeout(clickTimer);
+            clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
+            if (clickCount === 5) { clickCount = 0; showLogin(); }
+        }
+
+        function showLogin() { hideAll(); document.getElementById('loginView').style.display = 'block'; document.getElementById('passInput').value = ""; }
+        function checkPassword() {
+            if(document.getElementById('passInput').value === 'baba') {
+                hideAll();
+                document.getElementById('adminPanel').style.display = 'block';
+                renderAdminMenu();
+            } else { alert("Wrong Password"); goHome(); }
+        }
+
+        function saveSettings() {
+            bannerMsg = document.getElementById('adminMenuMsg').value;
+            delCharge = document.getElementById('adminDelCharge').value || 0;
+            localStorage.setItem('menuMsg', bannerMsg);
+            localStorage.setItem('delCharge', delCharge);
+            init();
+            alert("Settings Updated!");
+        }
+
+        async function saveItem() {
+            const id = document.getElementById('editId').value;
+            const name = document.getElementById('itemName').value;
+            const price = document.getElementById('itemPrice').value;
+            const note = document.getElementById('itemNote').value;
+            const cat = document.getElementById('itemCat').value;
+            const src = document.getElementById('itemSource').value;
+            const file = document.getElementById('itemFile').files[0];
+            if(!name || !price) return alert("Missing Info");
+
+            let img = "https://cdn-icons-png.flaticon.com/512/1147/1147805.png";
+            if(file) {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                img = await new Promise(r => reader.onload = () => r(reader.result));
+            } else if(id) {
+                img = menuData.find(i => i.id == id).img;
+            }
+
+            if(id) {
+                const idx = menuData.findIndex(i => i.id == id);
+                menuData[idx] = { ...menuData[idx], name, price: parseInt(price), note, category: cat, managedBy: src, img };
+            } else {
+                menuData.push({ id: Date.now(), name, price: parseInt(price), note, category: cat, managedBy: src, img, active: true });
+            }
+            localStorage.setItem('cafeMenu', JSON.stringify(menuData));
+            resetForm(); renderAdminMenu(); renderMenu();
+        }
+
+        function editItem(id) {
+            const i = menuData.find(item => item.id == id);
+            document.getElementById('editId').value = i.id;
+            document.getElementById('itemName').value = i.name;
+            document.getElementById('itemPrice').value = i.price;
+            document.getElementById('itemNote').value = i.note || "";
+            document.getElementById('itemCat').value = i.category;
+            document.getElementById('itemSource').value = i.managedBy;
+            document.getElementById('formTitle').innerText = "Edit Item";
+            document.getElementById('saveBtn').innerText = "Update Item";
+            document.getElementById('cancelEdit').style.display = "block";
+            window.scrollTo(0,0);
+        }
+
+        function toggleActive(id) {
+            const idx = menuData.findIndex(i => i.id == id);
+            menuData[idx].active = !menuData[idx].active;
+            if(!menuData[idx].active) cart[id] = 0;
+            localStorage.setItem('cafeMenu', JSON.stringify(menuData));
+            renderAdminMenu(); renderMenu(); updateTotal();
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menuContainer');
+            container.innerHTML = "";
+            ["Snacks", "Beverages", "From Baba's Kitchen"].forEach(cat => {
+                const items = menuData.filter(i => i.category === cat);
+                if(items.length > 0) {
+                    container.innerHTML += `<div class="category-header">${cat}</div>`;
+                    items.forEach(item => {
+                        cart[item.id] = cart[item.id] || 0;
+                        const inactive = item.active === false;
+                        container.innerHTML += `
+                        <div class="menu-item ${inactive ? 'is-inactive' : ''}">
+                            <img src="${item.img}" class="item-img">
+                            <div style="flex:1">
+                                <strong>${item.name}</strong> ${inactive ? '<span class="sold-out">Sold Out</span>' : ''}<br>
+                                ${item.note ? `<span class="item-custom-msg">${item.note}</span>` : ""}
+                                <span class="source-tag">${item.managedBy === 'Baba' ? "Baba's Kitchen" : "Cafe Baithak"}</span><br>
+                                <small>₹${item.price}</small>
+                            </div>
+                            <div class="qty-controls">
+                                <button onclick="changeQty(${item.id},-1)">-</button>
+                                <span id="q-${item.id}">${cart[item.id]}</span>
+                                <button onclick="changeQty(${item.id},1)">+</button>
+                            </div>
+                        </div>`;
+                    });
+                }
+            });
+        }
+
+        function changeQty(id, delta) {
+            const item = menuData.find(i => i.id == id);
+            const activeMgr = item.managedBy || "Admin";
+            const currentInCart = Object.keys(cart).filter(k => cart[k] > 0);
+            if(delta > 0 && currentInCart.length > 0) {
+                const first = menuData.find(i => i.id == currentInCart[0]);
+                if(first.managedBy !== activeMgr) {
+                    const t = document.getElementById("toast");
+                    t.className = "show";
+                    setTimeout(() => t.className = t.className.replace("show", ""), 3000);
+                    return;
+                }
+            }
+            cart[id] = Math.max(0, (cart[id] || 0) + delta);
+            document.getElementById('q-'+id).innerText = cart[id];
+            updateTotal();
+        }
+
+        function updateTotal() {
+            let t = 0;
+            menuData.forEach(i => t += (cart[i.id] || 0) * i.price);
+            document.getElementById('totalDisplay').innerText = t;
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btnPickup').className = `toggle-btn ${mode === 'Pickup' ? 'active' : ''}`;
+            document.getElementById('btnDelivery').className = `toggle-btn ${mode === 'Delivery' ? 'active' : ''}`;
+            document.getElementById('custAddr').style.display = mode === 'Delivery' ? 'block' : 'none';
+            showSummary();
+        }
+
+        function showSummary() {
+            let sub = 0, isBaba = false, html = "";
+            menuData.forEach(i => {
+                if(cart[i.id] > 0) {
+                    html += `<div style="display:flex; justify-content:space-between"><span>${i.name} x ${cart[i.id]}</span><span>₹${i.price * cart[i.id]}</span></div>`;
+                    sub += i.price * cart[i.id];
+                    if(i.managedBy === 'Baba') isBaba = true;
+                }
+            });
+            if(sub === 0) return alert("Cart empty");
+            let fee = (!isBaba && currentMode === 'Delivery') ? parseInt(delCharge) : 0;
+            html += `<hr><div style="display:flex; justify-content:space-between"><span>Subtotal</span><span>₹${sub}</span></div>`;
+            html += `<div style="display:flex; justify-content:space-between; color:#666"><span>Delivery (${currentMode})</span><span>₹${fee}</span></div>`;
+            html += `<div style="display:flex; justify-content:space-between; font-weight:bold; color:red; margin-top:10px"><span>Total</span><span>₹${sub + fee}</span></div>`;
+            hideAll();
+            document.getElementById('summaryView').style.display = 'block';
+            document.getElementById('summaryItems').innerHTML = html;
+        }
+
+        function sendOrder() {
+            const name = document.getElementById('custName').value;
+            const addr = document.getElementById('custAddr').value;
+            if(!name) return alert("Name required");
+            let sub = 0, isBaba = false, msg = `*NEW ORDER (${currentMode})*%0A`;
+            
+            const itemsToPush = [];
+            menuData.forEach(i => {
+                if(cart[i.id] > 0) {
+                    msg += `• ${i.name} x ${cart[i.id]}%0A`;
+                    sub += i.price * cart[i.id];
+                    if(i.managedBy === 'Baba') isBaba = true;
+                    itemsToPush.push({ name: i.name, qty: cart[i.id], price: i.price });
+                }
+            });
+            let fee = (!isBaba && currentMode === 'Delivery') ? parseInt(delCharge) : 0;
+            msg += `%0A*Total: ₹${sub + fee}*%0A*Name:* ${name}`;
+            if(currentMode === 'Delivery') msg += `%0A*Address:* ${addr}`;
+
+            // PUSH TO FIREBASE
+            if (window.pushOrderToFirebase) {
+                window.pushOrderToFirebase({
+                    customerName: name,
+                    address: addr || "Pickup",
+                    total: sub + fee,
+                    items: itemsToPush,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            window.open(`https://wa.me/919538003340?text=${msg}`);
+        }
+
+        function renderAdminMenu() {
+            const d = document.getElementById('adminMenuDisplay');
+            d.innerHTML = "<h4>Menu Items</h4>";
+            menuData.forEach(i => {
+                d.innerHTML += `<div class="admin-row">
+                    <strong>${i.name}</strong> (₹${i.price})<br>
+                    <div class="admin-controls">
+                        <button onclick="editItem(${i.id})">Edit</button>
+                        <button onclick="toggleActive(${i.id})">${i.active === false ? 'Enable' : 'Grey Out'}</button>
+                        <button onclick="deleteItem(${i.id})" style="color:red">Del</button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        function deleteItem(id) {
+            if(confirm("Delete?")) {
+                menuData = menuData.filter(i => i.id != id);
+                localStorage.setItem('cafeMenu', JSON.stringify(menuData));
+                renderAdminMenu(); renderMenu();
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('editId').value = "";
+            document.getElementById('formTitle').innerText = "Add Menu Item";
+            document.getElementById('saveBtn').innerText = "Add to Menu";
+            document.getElementById('cancelEdit').style.display = "none";
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemPrice').value = "";
+        }
+
+        function hideAll() { ['customerView','adminPanel','loginView','summaryView','bottomBar'].forEach(id => document.getElementById(id).style.display = 'none'); }
+        function goHome() { hideAll(); document.getElementById('customerView').style.display = 'block'; document.getElementById('bottomBar').style.display = 'flex'; renderMenu(); }
+        function logout() { location.reload(); }
+
+        function init() {
+            const b = document.getElementById('menuBanner');
+            if(bannerMsg) { b.innerText = bannerMsg; b.style.display = "block"; } else { b.style.display = "none"; }
+            document.getElementById('adminMenuMsg').value = bannerMsg;
+            document.getElementById('adminDelCharge').value = delCharge;
+            renderMenu();
+        }
+        init();
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // REPLACE THE PLACEHOLDERS BELOW WITH YOUR ACTUAL KEYS
+        const firebaseConfig = {
+            apiKey: "PASTE_API_KEY_HERE",
+            authDomain: "PASTE_AUTH_DOMAIN_HERE",
+            projectId: "PASTE_PROJECT_ID_HERE",
+            storageBucket: "PASTE_STORAGE_BUCKET_HERE",
+            messagingSenderId: "PASTE_SENDER_ID_HERE",
+            appId: "PASTE_APP_ID_HERE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.pushOrderToFirebase = async (orderData) => {
+            try {
+                const docRef = await addDoc(collection(db, "orders"), orderData);
+                console.log("Order saved to Firebase with ID: ", docRef.id);
+            } catch (e) {
+                console.error("Firebase Error: ", e);
+            }
+        };
+        console.log("Firebase initialized!");
+    </script>
+    </body>
+</html>
