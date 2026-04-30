@@ -394,5 +394,25 @@
   const app = initializeApp(firebaseConfig);
   console.log("Firebase connected to Cafe Baithak!");
 </script>
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+// 1. ADD THIS LINE:
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = { /* your actual config here */ };
+
+const app = initializeApp(firebaseConfig);
+// 2. ADD THIS LINE:
+const db = getFirestore(app);
+
+// Example function to push data
+async function placeOrder(orderData) {
+  try {
+    const docRef = await addDoc(collection(db, "orders"), orderData);
+    console.log("Order saved with ID: ", docRef.id);
+  } catch (e) {
+    console.error("Error adding document: ", e);
+  }
+}
 </body>
 </html>
