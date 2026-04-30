@@ -132,7 +132,7 @@
 <script type="module">
     // 1. Firebase Imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
@@ -148,8 +148,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 2. Main Logic
-    let menuData = JSON.parse(localStorage.getItem('cafeMenu')) || [];
+    // 2. State & Persistence
+    let menuData = []; 
     let bannerMsg = localStorage.getItem('menuMsg') || "";
     let delCharge = localStorage.getItem('delCharge') || 30;
     let cart = {};
@@ -157,7 +157,19 @@
     let clickCount = 0;
     let clickTimer = null;
 
-    // Attach functions to window because type="module" scripts are not global
+    // --- FIREBASE REAL-TIME LISTENER ---
+    onSnapshot(collection(db, "menu"), (snapshot) => {
+        menuData = snapshot.docs.map(doc => ({ 
+            docId: doc.id, // Important for updates/deletes
+            ...doc.data() 
+        }));
+        window.renderMenu();
+        if(document.getElementById('adminPanel').style.display === 'block') {
+            window.renderAdminMenu();
+        }
+    });
+
+    // 3. Admin & Auth
     window.handleLogoClick = function() {
         clickCount++;
         clearTimeout(clickTimer);
@@ -175,17 +187,18 @@
         } else { alert("Wrong Password"); window.goHome(); } 
     };
 
+    // 4. Admin Actions
     window.saveSettings = function() {
         bannerMsg = document.getElementById('adminMenuMsg').value;
         delCharge = document.getElementById('adminDelCharge').value || 0;
         localStorage.setItem('menuMsg', bannerMsg);
         localStorage.setItem('delCharge', delCharge);
         init();
-        alert("Settings Updated!");
+        alert("Global Settings Updated!");
     };
 
     window.saveItem = async function() {
-        const id = document.getElementById('editId').value;
+        const editId = document.getElementById('editId').value;
         const name = document.getElementById('itemName').value;
         const price = document.getElementById('itemPrice').value;
         const note = document.getElementById('itemNote').value;
@@ -200,26 +213,44 @@
             const reader = new FileReader();
             reader.readAsDataURL(file);
             img = await new Promise(r => reader.onload = () => r(reader.result));
-        } else if(id) {
-            img = menuData.find(i => i.id == id).img;
+        } else if(editId) {
+            img = menuData.find(i => i.id == editId).img;
         }
 
-        const itemContent = { name, price: parseInt(price), note, category: cat, managedBy: src, img, active: true };
+        const itemContent = { 
+            id: editId ? parseInt(editId) : Date.now(),
+            name, 
+            price: parseInt(price), 
+            note, 
+            category: cat, 
+            managedBy: src, 
+            img, 
+            active: true 
+        };
 
-        if(id) {
-            const idx = menuData.findIndex(i => i.id == id);
-            menuData[idx] = { ...menuData[idx], ...itemContent };
-            // Optional: Update Firestore if using permanent IDs
-        } else {
-            const dataToSave = { ...itemContent, id: Date.now() };
-            menuData.push(dataToSave);
-            try { await addDoc(collection(db, "menu"), dataToSave); } catch(e) { console.error(e); }
-        }
+        try {
+            if(editId) {
+                const cloudDoc = menuData.find(i => i.id == editId);
+                await updateDoc(doc(db, "menu", cloudDoc.docId), itemContent);
+            } else {
+                await addDoc(collection(db, "menu"), itemContent);
+            }
+            window.resetForm();
+        } catch(e) { console.error("Cloud Error:", e); alert("Error saving to cloud. Check rules."); }
+    };
 
-        localStorage.setItem('cafeMenu', JSON.stringify(menuData));
-        window.resetForm();
-        window.renderAdminMenu();
-        window.renderMenu();
+    window.deleteItem = async (id) => { 
+        if(confirm("Permanently delete this item?")) { 
+            const cloudDoc = menuData.find(i => i.id == id);
+            try { await deleteDoc(doc(db, "menu", cloudDoc.docId)); } catch(e) { console.error(e); }
+        } 
+    };
+
+    window.toggleActive = async (id) => {
+        const cloudDoc = menuData.find(i => i.id == id);
+        try { 
+            await updateDoc(doc(db, "menu", cloudDoc.docId), { active: !cloudDoc.active }); 
+        } catch(e) { console.error(e); }
     };
 
     window.editItem = (id) => {
@@ -236,78 +267,7 @@
         window.scrollTo(0,0);
     };
 
-    window.toggleActive = (id) => {
-        const idx = menuData.findIndex(i => i.id == id);
-        menuData[idx].active = !menuData[idx].active;
-        if(!menuData[idx].active) cart[id] = 0;
-        localStorage.setItem('cafeMenu', JSON.stringify(menuData));
-        window.renderAdminMenu(); window.renderMenu(); window.updateTotal();
-    };
-
-    window.changeQty = (id, delta) => {
-        const item = menuData.find(i => i.id == id);
-        const activeMgr = item.managedBy || "Admin";
-        const currentInCart = Object.keys(cart).filter(k => cart[k] > 0);
-        
-        if(delta > 0 && currentInCart.length > 0) {
-            const first = menuData.find(i => i.id == currentInCart[0]);
-            if(first.managedBy !== activeMgr) {
-                const t = document.getElementById("toast");
-                t.className = "show";
-                setTimeout(() => t.className = t.className.replace("show", ""), 3000);
-                return;
-            }
-        }
-        cart[id] = Math.max(0, (cart[id] || 0) + delta);
-        document.getElementById('q-'+id).innerText = cart[id];
-        window.updateTotal();
-    };
-
-    window.updateTotal = () => {
-        let t = 0;
-        menuData.forEach(i => t += (cart[i.id] || 0) * i.price);
-        document.getElementById('totalDisplay').innerText = t;
-    };
-
-    window.setMode = (mode) => {
-        currentMode = mode;
-        document.getElementById('btnPickup').className = `toggle-btn ${mode === 'Pickup' ? 'active' : ''}`;
-        document.getElementById('btnDelivery').className = `toggle-btn ${mode === 'Delivery' ? 'active' : ''}`;
-        document.getElementById('custAddr').style.display = mode === 'Delivery' ? 'block' : 'none';
-        window.showSummary();
-    };
-
-    window.showSummary = () => {
-        let sub = 0, isBaba = false, html = "";
-        menuData.forEach(i => {
-            if(cart[i.id] > 0) {
-                html += `<div style="display:flex; justify-content:space-between"><span>${i.name} x ${cart[i.id]}</span><span>₹${i.price * cart[i.id]}</span></div>`;
-                sub += i.price * cart[i.id];
-                if(i.managedBy === 'Baba') isBaba = true;
-            }
-        });
-        if(sub === 0) return alert("Cart empty");
-        let fee = (!isBaba && currentMode === 'Delivery') ? parseInt(delCharge) : 0;
-        html += `<hr><div style="display:flex; justify-content:space-between"><span>Subtotal</span><span>₹${sub}</span></div>`;
-        html += `<div style="display:flex; justify-content:space-between; color:#666"><span>Delivery (${currentMode})</span><span>₹${fee}</span></div>`;
-        html += `<div style="display:flex; justify-content:space-between; font-weight:bold; color:red; margin-top:10px"><span>Total</span><span>₹${sub + fee}</span></div>`;
-        hideAll();
-        document.getElementById('summaryView').style.display = 'block';
-        document.getElementById('summaryItems').innerHTML = html;
-    };
-
-    window.sendOrder = () => {
-        const name = document.getElementById('custName').value;
-        const addr = document.getElementById('custAddr').value;
-        if(!name) return alert("Name required");
-        let sub = 0, isBaba = false, msg = `*NEW ORDER (${currentMode})*%0A`;
-        menuData.forEach(i => { if(cart[i.id] > 0) { msg += `• ${i.name} x ${cart[i.id]}%0A`; sub += i.price * cart[i.id]; if(i.managedBy === 'Baba') isBaba = true; } });
-        let fee = (!isBaba && currentMode === 'Delivery') ? parseInt(delCharge) : 0;
-        msg += `%0A*Total: ₹${sub + fee}*%0A*Name:* ${name}`;
-        if(currentMode === 'Delivery') msg += `%0A*Address:* ${addr}`;
-        window.open(`https://wa.me/919538003340?text=${msg}`);
-    };
-
+    // 5. User UI & Cart
     window.renderMenu = () => {
         const container = document.getElementById('menuContainer');
         container.innerHTML = "";
@@ -338,36 +298,58 @@
         });
     };
 
+    window.changeQty = (id, delta) => {
+        const item = menuData.find(i => i.id == id);
+        const activeMgr = item.managedBy || "Admin";
+        const currentInCart = Object.keys(cart).filter(k => cart[k] > 0);
+        
+        if(delta > 0 && currentInCart.length > 0) {
+            const first = menuData.find(i => i.id == currentInCart[0]);
+            if(first.managedBy !== activeMgr) {
+                const t = document.getElementById("toast");
+                t.className = "show";
+                setTimeout(() => t.className = t.className.replace("show", ""), 3000);
+                return;
+            }
+        }
+        cart[id] = Math.max(0, (cart[id] || 0) + delta);
+        const el = document.getElementById('q-'+id);
+        if(el) el.innerText = cart[id];
+        window.updateTotal();
+    };
+
+    window.updateTotal = () => {
+        let t = 0;
+        menuData.forEach(i => t += (cart[i.id] || 0) * i.price);
+        document.getElementById('totalDisplay').innerText = t;
+    };
+
     window.renderAdminMenu = () => {
         const d = document.getElementById('adminMenuDisplay');
-        d.innerHTML = "<h4>Menu Items</h4>";
+        d.innerHTML = "<h4>Menu Items (Cloud Sync)</h4>";
         menuData.forEach(i => {
             d.innerHTML += `<div class="admin-row">
                 <strong>${i.name}</strong> (₹${i.price})<br>
                 <div class="admin-controls">
                     <button onclick="editItem(${i.id})">Edit</button>
-                    <button onclick="toggleActive(${i.id})">${i.active === false ? 'Enable' : 'Grey Out'}</button>
-                    <button onclick="deleteItem(${i.id})" style="color:red">Del</button>
+                    <button onclick="toggleActive(${i.id})">${i.active === false ? 'Enable' : 'Sold Out'}</button>
+                    <button onclick="deleteItem(${i.id})" style="color:red">Delete</button>
                 </div>
             </div>`;
         });
     };
 
-    window.deleteItem = (id) => { if(confirm("Delete?")) { menuData = menuData.filter(i => i.id != id); localStorage.setItem('cafeMenu', JSON.stringify(menuData)); window.renderAdminMenu(); window.renderMenu(); } };
-    window.resetForm = () => { document.getElementById('editId').value = ""; document.getElementById('formTitle').innerText = "Add Menu Item"; document.getElementById('saveBtn').innerText = "Add to Menu"; document.getElementById('cancelEdit').style.display = "none"; document.getElementById('itemName').value = ""; document.getElementById('itemPrice').value = ""; };
-    function hideAll() { ['customerView','adminPanel','loginView','summaryView','bottomBar'].forEach(id => document.getElementById(id).style.display = 'none'); };
-    window.goHome = () => { hideAll(); document.getElementById('customerView').style.display = 'block'; document.getElementById('bottomBar').style.display = 'flex'; window.renderMenu(); };
-    window.logout = () => { location.reload(); };
+    // 6. Checkout Logic
+    window.setMode = (mode) => {
+        currentMode = mode;
+        document.getElementById('btnPickup').className = `toggle-btn ${mode === 'Pickup' ? 'active' : ''}`;
+        document.getElementById('btnDelivery').className = `toggle-btn ${mode === 'Delivery' ? 'active' : ''}`;
+        document.getElementById('custAddr').style.display = mode === 'Delivery' ? 'block' : 'none';
+        window.showSummary();
+    };
 
-    function init() {
-        const b = document.getElementById('menuBanner');
-        if(bannerMsg) { b.innerText = bannerMsg; b.style.display = "block"; } else { b.style.display = "none"; }
-        document.getElementById('adminMenuMsg').value = bannerMsg;
-        document.getElementById('adminDelCharge').value = delCharge;
-        window.renderMenu();
-    }
-
-    init();
-</script>
-</body>
-</html>
+    window.showSummary = () => {
+        let sub = 0, isBaba = false, html = "";
+        menuData.forEach(i => {
+            if(cart[i.id] > 0) {
+                html += `<div style="display:flex;
