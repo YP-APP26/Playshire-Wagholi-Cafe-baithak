@@ -15,97 +15,78 @@
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>Firestore Exchange</h2>
-    <input type="text" id="userInput" placeholder="Enter some data...">
-    <button id="saveBtn">Send to Firestore</button>
-
-    <div id="data-display">
-        <strong>Recent Data:</strong>
-        <div id="list">Loading...</div>
+    <div class="container">
+        <h2>Firestore Exchange</h2>
+        <input type="text" id="userInput" placeholder="Enter some data...">
+        <button id="saveBtn">Send to Firestore</button>
+        <div id="data-display">
+            <strong>Recent Data:</strong>
+            <div id="list">Loading...</div>
+        </div>
     </div>
-</div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit } 
-    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+    <script type="module">
+        // 1. Correct CDN Imports (Removed the redundant local imports)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
-  authDomain: "cafebaitak.firebaseapp.com",
-  databaseURL: "https://cafebaitak-default-rtdb.firebaseio.com",
-  projectId: "cafebaitak",
-  storageBucket: "cafebaitak.firebasestorage.app",
-  messagingSenderId: "469277261083",
-  appId: "1:469277261083:web:7780e7bcb45c0bc885e7be",
-  measurementId: "G-X6W8C8TWZH"
-};
+        // 2. Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
+            authDomain: "cafebaitak.firebaseapp.com",
+            databaseURL: "https://cafebaitak-default-rtdb.firebaseio.com",
+            projectId: "cafebaitak",
+            storageBucket: "cafebaitak.firebasestorage.app",
+            messagingSenderId: "469277261083",
+            appId: "1:469277261083:web:7780e7bcb45c0bc885e7be",
+            measurementId: "G-X6W8C8TWZH"
+        };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-    
-    // 1. REPLACE THIS WITH YOUR CONFIG FROM FIREBASE CONSOLE
-    const firebaseConfig = {
- apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
-  authDomain: "cafebaitak.firebaseapp.com",
-  databaseURL: "https://cafebaitak-default-rtdb.firebaseio.com",
-  projectId: "cafebaitak",
-  storageBucket: "cafebaitak.firebasestorage.app",
-  messagingSenderId: "469277261083",
-  appId: "1:469277261083:web:7780e7bcb45c0bc885e7be",
-  measurementId: "G-X6W8C8TWZH"
-    };
+        // 3. Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const dataCollection = collection(db, "web_test");
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const dataCollection = collection(db, "web_test"); // The folder/collection name
+        // 4. WRITE DATA
+        const inputField = document.getElementById('userInput');
+        const saveBtn = document.getElementById('saveBtn');
 
-    // 2. WRITE DATA
-    const inputField = document.getElementById('userInput');
-    const saveBtn = document.getElementById('saveBtn');
-
-    saveBtn.addEventListener('click', async () => {
-        const text = inputField.value;
-        if (text) {
-            try {
-                await addDoc(dataCollection, {
-                    content: text,
-                    timestamp: new Date()
-                });
-                inputField.value = "";
-                alert("Data saved!");
-            } catch (e) {
-                console.error("Error adding document: ", e);
+        saveBtn.addEventListener('click', async () => {
+            const text = inputField.value;
+            if (text) {
+                try {
+                    await addDoc(dataCollection, {
+                        content: text,
+                        timestamp: new Date() 
+                    });
+                    inputField.value = "";
+                    alert("Data saved!");
+                } catch (e) {
+                    console.error("Error adding document: ", e);
+                    alert("Error saving data. Check console.");
+                }
             }
-        }
-    });
-
-    // 3. READ DATA (Real-time listener)
-    const listDiv = document.getElementById('list');
-    const q = query(dataCollection, orderBy("timestamp", "desc"), limit(5));
-
-    onSnapshot(q, (snapshot) => {
-        listDiv.innerHTML = ""; // Clear list
-        snapshot.forEach((doc) => {
-            const item = document.createElement('div');
-            item.className = 'data-item';
-            item.textContent = doc.data().content;
-            listDiv.appendChild(item);
         });
-        if (snapshot.empty) listDiv.innerHTML = "No data yet.";
-    });
-</script>
 
+        // 5. READ DATA (Real-time listener)
+        const listDiv = document.getElementById('list');
+        const q = query(dataCollection, orderBy("timestamp", "desc"), limit(5));
+
+        onSnapshot(q, (snapshot) => {
+            listDiv.innerHTML = ""; 
+            snapshot.forEach((doc) => {
+                const item = document.createElement('div');
+                item.className = 'data-item';
+                item.textContent = doc.data().content;
+                listDiv.appendChild(item);
+            });
+            if (snapshot.empty) {
+                listDiv.innerHTML = "No data yet.";
+            }
+        }, (error) => {
+            console.error("Snapshot error:", error);
+            listDiv.innerHTML = "Error loading data. Check security rules.";
+        });
+    </script>
 </body>
 </html>
