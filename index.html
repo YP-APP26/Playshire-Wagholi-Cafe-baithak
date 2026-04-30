@@ -132,7 +132,7 @@
 <script type="module">
     // 1. Firebase Imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyC9ZnTGCvWofbETHuxsWxqYhOQI-qr5D-Y",
@@ -162,16 +162,17 @@
         clickCount++;
         clearTimeout(clickTimer);
         clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
-        if (clickCount === 5) { clickCount = 0; showLogin(); }
+        if (clickCount === 5) { clickCount = 0; window.showLogin(); }
     };
 
     window.showLogin = function() { hideAll(); document.getElementById('loginView').style.display = 'block'; document.getElementById('passInput').value = ""; };
+    
     window.checkPassword = function() { 
         if(document.getElementById('passInput').value === 'baba') { 
             hideAll(); 
             document.getElementById('adminPanel').style.display = 'block'; 
-            renderAdminMenu(); 
-        } else { alert("Wrong Password"); goHome(); } 
+            window.renderAdminMenu(); 
+        } else { alert("Wrong Password"); window.goHome(); } 
     };
 
     window.saveSettings = function() {
@@ -203,22 +204,22 @@
             img = menuData.find(i => i.id == id).img;
         }
 
-        const newItem = { name, price: parseInt(price), note, category: cat, managedBy: src, img, active: true };
+        const itemContent = { name, price: parseInt(price), note, category: cat, managedBy: src, img, active: true };
 
         if(id) {
             const idx = menuData.findIndex(i => i.id == id);
-            menuData[idx] = { ...menuData[idx], ...newItem };
+            menuData[idx] = { ...menuData[idx], ...itemContent };
+            // Optional: Update Firestore if using permanent IDs
         } else {
-            const dataToSave = { ...newItem, id: Date.now() };
+            const dataToSave = { ...itemContent, id: Date.now() };
             menuData.push(dataToSave);
-            // Example Firebase Write
             try { await addDoc(collection(db, "menu"), dataToSave); } catch(e) { console.error(e); }
         }
 
         localStorage.setItem('cafeMenu', JSON.stringify(menuData));
-        resetForm();
-        renderAdminMenu();
-        renderMenu();
+        window.resetForm();
+        window.renderAdminMenu();
+        window.renderMenu();
     };
 
     window.editItem = (id) => {
@@ -240,7 +241,7 @@
         menuData[idx].active = !menuData[idx].active;
         if(!menuData[idx].active) cart[id] = 0;
         localStorage.setItem('cafeMenu', JSON.stringify(menuData));
-        renderAdminMenu(); renderMenu(); updateTotal();
+        window.renderAdminMenu(); window.renderMenu(); window.updateTotal();
     };
 
     window.changeQty = (id, delta) => {
@@ -259,7 +260,7 @@
         }
         cart[id] = Math.max(0, (cart[id] || 0) + delta);
         document.getElementById('q-'+id).innerText = cart[id];
-        updateTotal();
+        window.updateTotal();
     };
 
     window.updateTotal = () => {
@@ -273,7 +274,7 @@
         document.getElementById('btnPickup').className = `toggle-btn ${mode === 'Pickup' ? 'active' : ''}`;
         document.getElementById('btnDelivery').className = `toggle-btn ${mode === 'Delivery' ? 'active' : ''}`;
         document.getElementById('custAddr').style.display = mode === 'Delivery' ? 'block' : 'none';
-        showSummary();
+        window.showSummary();
     };
 
     window.showSummary = () => {
@@ -352,10 +353,10 @@
         });
     };
 
-    window.deleteItem = (id) => { if(confirm("Delete?")) { menuData = menuData.filter(i => i.id != id); localStorage.setItem('cafeMenu', JSON.stringify(menuData)); renderAdminMenu(); renderMenu(); } };
+    window.deleteItem = (id) => { if(confirm("Delete?")) { menuData = menuData.filter(i => i.id != id); localStorage.setItem('cafeMenu', JSON.stringify(menuData)); window.renderAdminMenu(); window.renderMenu(); } };
     window.resetForm = () => { document.getElementById('editId').value = ""; document.getElementById('formTitle').innerText = "Add Menu Item"; document.getElementById('saveBtn').innerText = "Add to Menu"; document.getElementById('cancelEdit').style.display = "none"; document.getElementById('itemName').value = ""; document.getElementById('itemPrice').value = ""; };
-    window.hideAll = () => { ['customerView','adminPanel','loginView','summaryView','bottomBar'].forEach(id => document.getElementById(id).style.display = 'none'); };
-    window.goHome = () => { hideAll(); document.getElementById('customerView').style.display = 'block'; document.getElementById('bottomBar').style.display = 'flex'; renderMenu(); };
+    function hideAll() { ['customerView','adminPanel','loginView','summaryView','bottomBar'].forEach(id => document.getElementById(id).style.display = 'none'); };
+    window.goHome = () => { hideAll(); document.getElementById('customerView').style.display = 'block'; document.getElementById('bottomBar').style.display = 'flex'; window.renderMenu(); };
     window.logout = () => { location.reload(); };
 
     function init() {
@@ -363,7 +364,7 @@
         if(bannerMsg) { b.innerText = bannerMsg; b.style.display = "block"; } else { b.style.display = "none"; }
         document.getElementById('adminMenuMsg').value = bannerMsg;
         document.getElementById('adminDelCharge').value = delCharge;
-        renderMenu();
+        window.renderMenu();
     }
 
     init();
